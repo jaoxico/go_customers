@@ -1,15 +1,17 @@
 package main
 
 import (
-	"booking-app/structs"
 	"context"
 	"encoding/json"
 	"fmt"
+	customvalidators "go_customers/customValidators"
+	"go_customers/structs"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -33,7 +35,11 @@ func getMongoConnection() *mongo.Client {
 	return client
 }
 
+var validate = validator.New(validator.WithRequiredStructEnabled())
+var _ = validate.RegisterValidation("isDate", customvalidators.IsAValidDate)
+
 func main() {
+
 	router := mux.NewRouter()
 	router.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
 		_, err := response.Write([]byte("Testando!"))
@@ -43,12 +49,43 @@ func main() {
 		//		response.WriteHeader(http.StatusOK)
 	}).Methods("GET")
 	router.HandleFunc("/costumer", func(response http.ResponseWriter, request *http.Request) {
+		fmt.Println("incoming /customer POST")
 		response.Header().Add("content-type", "application/json")
 		client := getMongoConnection()
-		var customer structs.Customer
+		var customer structs.CustomerPayload
 		err := json.NewDecoder(request.Body).Decode(&customer)
 		if err != nil {
 			http.Error(response, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = validate.Struct(customer)
+		if err != nil {
+			// this check is only needed when your code could produce
+			// an invalid value for validation such as interface with nil
+			// value most including myself do not usually have code like this.
+			// if _, ok := err.(*validator.InvalidValidationError); ok {
+			// 	fmt.Println(err)
+			// 	return
+			// }
+
+			type failedFieldsStruct struct {
+				Field   string
+				Value   interface{}
+				Message string
+			}
+
+			var failedFields []failedFieldsStruct
+
+			for _, err := range err.(validator.ValidationErrors) {
+				var failedField failedFieldsStruct
+				failedField.Field = err.StructField()
+				failedField.Value = err.Value()
+				failedField.Message = err.Tag() + " - " + err.Param()
+				failedFields = append(failedFields, failedField)
+				fmt.Println(`Invalid field`, failedField)
+			}
+			response.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(response).Encode(failedFields)
 			return
 		}
 		insertResult, err := structs.InsertCustomer(client, database, customer)
@@ -60,7 +97,7 @@ func main() {
 		}
 		_ = json.NewEncoder(response).Encode(insertResult)
 	}).Methods("POST")
-	router.HandleFunc("/costumers", func(response http.ResponseWriter, request *http.Request) {
+	router.HandleFunc("/costumer", func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Add("content-type", "application/json")
 		client := getMongoConnection()
 		var customers []structs.Customer

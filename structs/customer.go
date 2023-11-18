@@ -19,17 +19,24 @@ func randomDate() time.Time {
 	return time.Unix(sec, 0)
 }
 
+type CustomerPayload struct {
+	FirstName string `json:"FirstName" bson:"FirstName" validate:"required"`
+	LastName  string `json:"LastName" bson:"LastName" validate:"required"`
+	Gender    string `json:"Gender" bson:"Gender" validate:"required,oneof=Masculino Feminino"`
+	Dob       string `json:"Dob" bson:"Dob" validate:"required,isDate"`
+}
+
 type Customer struct {
-	Id        primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
-	FirstName string             `json:"FirstName,omitempty" bson:"FirstName,omitempty"`
-	LastName  string             `json:"LastName,omitempty" bson:"LastName,omitempty"`
-	Gender    string             `json:"Gender,omitempty" bson:"Gender,omitempty"`
-	Dob       string             `json:"Dob,omitempty" bson:"Dob,omitempty"`
+	Id        primitive.ObjectID `json:"_id" bson:"_id" validate:"required"`
+	FirstName string             `json:"FirstName" bson:"FirstName" validate:"required"`
+	LastName  string             `json:"LastName" bson:"LastName" validate:"required"`
+	Gender    string             `json:"Gender" bson:"Gender" validate:"required,oneof=Masculino Feminino"`
+	Dob       string             `json:"Dob" bson:"Dob" validate:"required,isDate"`
 }
 
 const customerCollection string = "customer"
 
-func InsertCustomer(client *mongo.Client, database string, newCustomer Customer) (mongo.InsertOneResult, error) {
+func InsertCustomer(client *mongo.Client, database string, newCustomer CustomerPayload) (mongo.InsertOneResult, error) {
 	if newCustomer.Dob == "" {
 		newCustomer.Dob = randomDate().Format(time.DateOnly)
 	}
