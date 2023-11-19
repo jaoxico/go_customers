@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -42,6 +44,7 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
+		fmt.Println("incoming / GET")
 		_, err := response.Write([]byte("Testando!"))
 		if err != nil {
 			log.Fatal(err)
@@ -52,7 +55,7 @@ func main() {
 		fmt.Println("incoming /customer POST")
 		response.Header().Add("content-type", "application/json")
 		client := getMongoConnection()
-		var customer structs.CustomerPayload
+		var customer structs.CreateCustomerPayload
 		err := json.NewDecoder(request.Body).Decode(&customer)
 		if err != nil {
 			http.Error(response, err.Error(), http.StatusBadRequest)
@@ -98,6 +101,7 @@ func main() {
 		_ = json.NewEncoder(response).Encode(insertResult)
 	}).Methods("POST")
 	router.HandleFunc("/costumer", func(response http.ResponseWriter, request *http.Request) {
+		fmt.Println("incoming /customer GET")
 		response.Header().Add("content-type", "application/json")
 		client := getMongoConnection()
 		var customers []structs.Customer
@@ -110,6 +114,80 @@ func main() {
 		}
 		_ = json.NewEncoder(response).Encode(customers)
 	}).Methods("GET")
+	router.HandleFunc("/costumer/{id}", func(response http.ResponseWriter, request *http.Request) {
+		fmt.Println("incoming /customer DELETE")
+		response.Header().Add("content-type", "application/json")
+		var Id = mux.Vars(request)["id"]
+		client := getMongoConnection()
+		deleteResult, err := structs.DeleteCustomer(client, database, Id)
+		if err != nil {
+			fmt.Println(err.Error())
+			response.WriteHeader(http.StatusInternalServerError)
+			_, _ = response.Write([]byte(`{"message": "` + err.Error() + `"}`))
+			return
+		}
+		_ = json.NewEncoder(response).Encode(deleteResult)
+	}).Methods("DELETE")
+	router.HandleFunc("/costumer/{id}", func(response http.ResponseWriter, request *http.Request) {
+		fmt.Println("incoming /customer PATCH")
+		response.Header().Add("content-type", "application/json")
+		var customer structs.UpdateCustomerPayload
+		err := json.NewDecoder(request.Body).Decode(&customer)
+		if err != nil {
+			http.Error(response, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = validate.Struct(customer)
+		if err != nil {
+			// this check is only needed when your code could produce
+			// an invalid value for validation such as interface with nil
+			// value most including myself do not usually have code like this.
+			// if _, ok := err.(*validator.InvalidValidationError); ok {
+			// 	fmt.Println(err)
+			// 	return
+			// }
+
+			type failedFieldsStruct struct {
+				Field   string
+				Value   interface{}
+				Message string
+			}
+
+			var failedFields []failedFieldsStruct
+
+			for _, err := range err.(validator.ValidationErrors) {
+				var failedField failedFieldsStruct
+				failedField.Field = err.StructField()
+				failedField.Value = err.Value()
+				failedField.Message = err.Tag() + " - " + err.Param()
+				failedFields = append(failedFields, failedField)
+				fmt.Println(`Invalid field`, failedField)
+			}
+			response.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(response).Encode(failedFields)
+			return
+		}
+		var Id = mux.Vars(request)["id"]
+		_id, _ := primitive.ObjectIDFromHex(Id)
+		client := getMongoConnection()
+
+		var foundCustomer structs.Customer
+		err = client.Database(database).Collection(structs.CustomerCollection).FindOne(context.TODO(), bson.D{{Key: "_id", Value: _id}}).Decode(&foundCustomer)
+		if err != nil {
+			fmt.Println(err)
+			response.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(response).Encode(Id)
+			return
+		}
+		updateResult, err := structs.UpdateCustomer(client, database, foundCustomer, customer)
+		if err != nil {
+			fmt.Println(err.Error())
+			response.WriteHeader(http.StatusInternalServerError)
+			_, _ = response.Write([]byte(`{"message": "` + err.Error() + `"}`))
+			return
+		}
+		_ = json.NewEncoder(response).Encode(updateResult)
+	}).Methods("PATCH")
 	srv := &http.Server{
 		Handler:      router,
 		Addr:         "127.0.0.1:8000",
