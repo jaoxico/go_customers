@@ -88,7 +88,7 @@ func main() {
 				fmt.Println(`Invalid field`, failedField)
 			}
 			response.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(response).Encode(failedFields)
+			_ = json.NewEncoder(response).Encode(failedFields)
 			return
 		}
 		insertResult, err := structs.InsertCustomer(client, database, customer)
@@ -113,6 +113,23 @@ func main() {
 			return
 		}
 		_ = json.NewEncoder(response).Encode(customers)
+	}).Methods("GET")
+	router.HandleFunc("/costumer/{id}", func(response http.ResponseWriter, request *http.Request) {
+		fmt.Println("incoming /customer GET")
+		response.Header().Add("content-type", "application/json")
+		var Id = mux.Vars(request)["id"]
+		_id, _ := primitive.ObjectIDFromHex(Id)
+		client := getMongoConnection()
+		var foundCustomer structs.Customer
+		err := client.Database(database).Collection(structs.CustomerCollection).FindOne(context.TODO(), bson.D{{Key: "_id", Value: _id}}).Decode(&foundCustomer)
+		if err != nil {
+			fmt.Println(err)
+			response.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(response).Encode(Id)
+			return
+		}
+		response.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(response).Encode(foundCustomer)
 	}).Methods("GET")
 	router.HandleFunc("/costumer/{id}", func(response http.ResponseWriter, request *http.Request) {
 		fmt.Println("incoming /customer DELETE")
@@ -164,7 +181,7 @@ func main() {
 				fmt.Println(`Invalid field`, failedField)
 			}
 			response.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(response).Encode(failedFields)
+			_ = json.NewEncoder(response).Encode(failedFields)
 			return
 		}
 		var Id = mux.Vars(request)["id"]
@@ -176,7 +193,7 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 			response.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(response).Encode(Id)
+			_ = json.NewEncoder(response).Encode(Id)
 			return
 		}
 		updateResult, err := structs.UpdateCustomer(client, database, foundCustomer, customer)
