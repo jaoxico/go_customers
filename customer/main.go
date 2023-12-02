@@ -10,6 +10,7 @@ import (
 	"go_customers/database"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -125,7 +126,9 @@ func ListCustomers(client *mongo.Client, database string) ([]Customer, error) {
 func HandlePost(response http.ResponseWriter, request *http.Request) {
 	fmt.Println("incoming /customer POST")
 	response.Header().Add("content-type", "application/json")
-	client := database.GetMongoConnection()
+	mongoHost := os.Getenv(`GO_CUSTOMERS_MONGODB_URL`) // "mongodb://localhost:27017/?connect=direct"
+	databaseName := os.Getenv(`GO_CUSTOMERS_DB`)       // "go_customers"
+	client := database.GetMongoConnection(mongoHost)
 	var customer CreateCustomerPayload
 	err := json.NewDecoder(request.Body).Decode(&customer)
 	if err != nil {
@@ -162,7 +165,7 @@ func HandlePost(response http.ResponseWriter, request *http.Request) {
 		_ = json.NewEncoder(response).Encode(failedFields)
 		return
 	}
-	insertResult, err := InsertCustomer(client, database.Database, customer)
+	insertResult, err := InsertCustomer(client, databaseName, customer)
 	if err != nil {
 		fmt.Println(err.Error())
 		response.WriteHeader(http.StatusInternalServerError)
@@ -175,9 +178,11 @@ func HandlePost(response http.ResponseWriter, request *http.Request) {
 func HandleGetForList(response http.ResponseWriter, _ *http.Request) {
 	fmt.Println("incoming /customer GET")
 	response.Header().Add("content-type", "application/json")
-	client := database.GetMongoConnection()
+	mongoHost := os.Getenv(`GO_CUSTOMERS_MONGODB_URL`) // "mongodb://localhost:27017/?connect=direct"
+	databaseName := os.Getenv(`GO_CUSTOMERS_DB`)       // "go_customers"
+	client := database.GetMongoConnection(mongoHost)
 	var customers []Customer
-	customers, err := ListCustomers(client, database.Database)
+	customers, err := ListCustomers(client, databaseName)
 	if err != nil {
 		fmt.Println(err.Error())
 		response.WriteHeader(http.StatusInternalServerError)
@@ -192,9 +197,11 @@ func HandleGetById(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
 	var Id = mux.Vars(request)["id"]
 	_id, _ := primitive.ObjectIDFromHex(Id)
-	client := database.GetMongoConnection()
+	mongoHost := os.Getenv(`GO_CUSTOMERS_MONGODB_URL`) // "mongodb://localhost:27017/?connect=direct"
+	databaseName := os.Getenv(`GO_CUSTOMERS_DB`)       // "go_customers"
+	client := database.GetMongoConnection(mongoHost)
 	var foundCustomer Customer
-	err := client.Database(database.Database).Collection(Collection).FindOne(context.TODO(), bson.D{{Key: "_id", Value: _id}}).Decode(&foundCustomer)
+	err := client.Database(databaseName).Collection(Collection).FindOne(context.TODO(), bson.D{{Key: "_id", Value: _id}}).Decode(&foundCustomer)
 	if err != nil {
 		fmt.Println(err)
 		response.WriteHeader(http.StatusNotFound)
@@ -209,8 +216,10 @@ func HandleDelete(response http.ResponseWriter, request *http.Request) {
 	fmt.Println("incoming /customer DELETE")
 	response.Header().Add("content-type", "application/json")
 	var Id = mux.Vars(request)["id"]
-	client := database.GetMongoConnection()
-	deleteResult, err := DeleteCustomer(client, database.Database, Id)
+	mongoHost := os.Getenv(`GO_CUSTOMERS_MONGODB_URL`) // "mongodb://localhost:27017/?connect=direct"
+	databaseName := os.Getenv(`GO_CUSTOMERS_DB`)       // "go_customers"
+	client := database.GetMongoConnection(mongoHost)
+	deleteResult, err := DeleteCustomer(client, databaseName, Id)
 	if err != nil {
 		fmt.Println(err.Error())
 		response.WriteHeader(http.StatusInternalServerError)
@@ -253,17 +262,19 @@ func HandlePatch(response http.ResponseWriter, request *http.Request) {
 	}
 	var Id = mux.Vars(request)["id"]
 	_id, _ := primitive.ObjectIDFromHex(Id)
-	client := database.GetMongoConnection()
+	mongoHost := os.Getenv(`GO_CUSTOMERS_MONGODB_URL`) // "mongodb://localhost:27017/?connect=direct"
+	databaseName := os.Getenv(`GO_CUSTOMERS_DB`)       // "go_customers"
+	client := database.GetMongoConnection(mongoHost)
 
 	var foundCustomer Customer
-	err = client.Database(database.Database).Collection(Collection).FindOne(context.TODO(), bson.D{{Key: "_id", Value: _id}}).Decode(&foundCustomer)
+	err = client.Database(databaseName).Collection(Collection).FindOne(context.TODO(), bson.D{{Key: "_id", Value: _id}}).Decode(&foundCustomer)
 	if err != nil {
 		fmt.Println(err)
 		response.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(response).Encode(Id)
 		return
 	}
-	updateResult, err := UpdateCustomer(client, database.Database, foundCustomer, updateCustomer)
+	updateResult, err := UpdateCustomer(client, databaseName, foundCustomer, updateCustomer)
 	if err != nil {
 		fmt.Println(err.Error())
 		response.WriteHeader(http.StatusInternalServerError)
